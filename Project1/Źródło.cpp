@@ -82,7 +82,7 @@ vector<Point> reorder(vector<Point> points)
 		subPoints.push_back(points[i].x - points[i].y);
 	}
 
-	newPoints.push_back(points[min_element(sumPoints.begin(), sumPoints.end()) - sumPoints.begin()]); // 0
+	newPoints.push_back(points[min_element(sumPoints.begin(), sumPoints.end()) - sumPoints.begin()]); //0
 	newPoints.push_back(points[max_element(subPoints.begin(), subPoints.end()) - subPoints.begin()]); //1
 	newPoints.push_back(points[min_element(subPoints.begin(), subPoints.end()) - subPoints.begin()]); //2
 	newPoints.push_back(points[max_element(sumPoints.begin(), sumPoints.end()) - sumPoints.begin()]); //3
@@ -104,7 +104,7 @@ Mat getWarp(Mat img, vector<Point> points, float w, float h)
 void main() {
 
 	float w, h;
-	VideoCapture cap("C:/Users/Mateusz/Desktop/xd/legitka.mp4");
+	VideoCapture cap(0);
 	CascadeClassifier plateCascade;
 	plateCascade.load("classifications.xml");
 
