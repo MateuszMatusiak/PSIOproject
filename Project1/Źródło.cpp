@@ -20,6 +20,10 @@ Mat imgWarp;
 Mat imgCrop;
 
 
+int hmin = 24, hmax = 0, smin = 113, smax = 130, vmin = 243, vmax = 217;
+
+vector<int> HSVmask{ {hmin, smin, vmin, hmax, smax, vmax} };
+
 
 void preProcessing() {
 
@@ -31,13 +35,13 @@ void preProcessing() {
 	erode(imgDilate, imgErode, kernel);
 }
 
-vector<Point> getContours() {
+vector<Point> getContours(Mat x) {
 
 	vector<vector<Point>> contours;
 	vector<Vec4i> hierarchy;
 
-	findContours(imgErode, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-	//drawContours(imgOriginal, contours, -1, Scalar(255, 0, 255), 2);
+	findContours(x, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+	//drawContours(x, contours, -1, Scalar(255, 0, 255), 2);
 	vector<vector<Point>> conPoly(contours.size());
 	vector<Rect> boundRect(contours.size());
 
@@ -47,7 +51,6 @@ vector<Point> getContours() {
 	for (int i = 0; i < contours.size(); i++)
 	{
 		double area = contourArea(contours[i]);
-		cout << area << endl;
 		if (area > 1000)
 		{
 			double peri = arcLength(contours[i], true);
@@ -66,15 +69,31 @@ vector<Point> getContours() {
 	return biggest;
 }
 
-//void drawPoints(Img img, vector<Point> points, Scalar color)
-//{
-//	int limit = (int)points.size();
-//	for (int i = 0; i < limit; i++)
-//	{
-//		circle(img.Original, points[i], 10, color, FILLED);
-//		putText(img.Original, to_string(i), points[i], FONT_HERSHEY_PLAIN, 4, color, 4);
-//	}
-//}
+
+bool isOKcolor(Mat x) {
+
+	vector<vector<Point>> contours;
+	vector<Vec4i> hierarchy;
+
+	findContours(x, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+	//drawContours(x, contours, -1, Scalar(255, 0, 255), 2);
+	vector<vector<Point>> conPoly(contours.size());
+	vector<Rect> boundRect(contours.size());
+
+
+	for (int i = 0; i < contours.size(); i++)
+	{
+		double area = contourArea(contours[i]);
+		cout << area<< endl;
+		if (area > 370000&&area<500000)
+		{
+				return true;
+		}
+	}
+	return false;
+}
+
+
 
 vector<Point> reorder(vector<Point> points)
 {
@@ -112,29 +131,68 @@ void getWarp(vector<Point> points, float width, float height)
 	return;
 }
 
+void HSVtrackbars() {
+
+	namedWindow("Trackbars", (640, 200));
+	createTrackbar("Hue Min", "Trackbars", &hmin, 179);
+	createTrackbar("Hue Max", "Trackbars", &hmax, 179);
+	createTrackbar("Sat Min", "Trackbars", &smin, 255);
+	createTrackbar("Sat Max", "Trackbars", &smax, 255);
+	createTrackbar("Val Min", "Trackbars", &vmin, 255);
+	createTrackbar("Val Max", "Trackbars", &vmax, 255);
+}
+
+
+void checkColor(Mat img)
+{
+	Mat HSV;
+	cvtColor(img, HSV, COLOR_BGR2HSV);
+	/*Scalar lower(HSVmask[0], HSVmask[1], HSVmask[2]);
+	Scalar upper(HSVmask[3], HSVmask[4], HSVmask[5]);*/
+
+	Scalar lower(hmin, hmax, smin);
+	Scalar upper(smax, vmin, vmax);
+	Mat mask;
+	inRange(HSV, lower, upper, mask);
+	imshow("mask", mask);
+	vector<Point> initialPoints = getContours(mask);
+	if (isOKcolor(mask))
+	{
+		imshow("res", img);
+	}
+}
+
+
+
+
 int main() {
 
 	vector<Point> initialPoints, docPoints;
+	String recPath = "nagrania/";
 
-	VideoCapture cap("C:/Users/Mateusz/Desktop/xd/legitka.mp4");
-	//VideoCapture cap(0);
-	CascadeClassifier plateCascade;
-	plateCascade.load("classifications.xml");
-
-	if (plateCascade.empty()) { cout << "XML file not loaded" << endl; }
+	VideoCapture cap(recPath + "6.mp4");
+	
+	HSVtrackbars();
 
 	while (true) {
-		waitKey(30);
+		waitKey(15);
 
 		cap.read(imgOriginal);
 		resize(imgOriginal, imgOriginal, Size(), 0.5, 0.5);
+
+
+		/*imshow("Image", imgOriginal);
+		waitKey(250);
+		checkColor(imgOriginal);
+		continue;*/
+
 
 		int height = imgOriginal.size[0];
 		int width = imgOriginal.size[1];
 
 		preProcessing();
-		imshow("xd", imgErode);
-		initialPoints = getContours();
+		//imshow("xd", imgErode);
+		initialPoints = getContours(imgErode);
 		if (initialPoints.size() < 4) {
 			imshow("Image", imgOriginal);
 			continue;
@@ -145,10 +203,15 @@ int main() {
 		int cropVal = 5;
 		Rect roi(cropVal, cropVal, width - (2 * cropVal), height - (2 * cropVal));
 		imgCrop = imgWarp(roi);
+
+		checkColor(imgCrop);
+
 		imshow("Image", imgOriginal);
 		//imshow("Image Dilation", imgThre);
 		//imshow("Image Warp", img.Warp);
-		imshow("Image Crop", imgCrop);
+		
+
+		//imshow("Image Crop", imgCrop);
 	}
 	return 0;
 }
