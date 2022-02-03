@@ -2,12 +2,11 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/objdetect.hpp>
+#include <opencv2/opencv.hpp>
 #include <iostream>
-
 
 using namespace cv;
 using namespace std;
-
 
 Mat imgOriginal;
 Mat imgGray;
@@ -19,15 +18,29 @@ Mat imgErode;
 Mat imgWarp;
 Mat imgCrop;
 
+VideoCapture cap;
+vector<Point> MaxContour;
+bool isContour = false;
+vector<vector<Point>> MaxConPoly;
+vector<Rect> MaxBoundRect;
 
-int hmin = 24, hmax = 0, smin = 113, smax = 130, vmin = 243, vmax = 217;
+Mat Result;
+int clipIndex = 0;
 
-vector<int> HSVmask{ {hmin, smin, vmin, hmax, smax, vmax} };
+//int hmin = 24, hmax = 0, smin = 113, smax = 130, vmin = 243, vmax = 217;
+// 3 int hmin = 49, hmax = 0, smin = 55, smax = 99, vmin = 255, vmax = 99;
+ int hmin = 31, hmax = 6, smin = 119, smax = 102, vmin = 242, vmax = 199;
 
+vector<vector<int>> HSVmask{	{hmin, smin, vmin, hmax, smax, vmax},
+								{hmin, smin, vmin, hmax, smax, vmax}, 
+								{hmin, smin, vmin, hmax, smax, vmax}, 
+								{hmin, smin, vmin, hmax, smax, vmax}, 
+								{hmin, smin, vmin, hmax, smax, vmax}, 
+								{hmin, smin, vmin, hmax, smax, vmax}, };
 
-void preProcessing() {
+void preProcessing(Mat x) {
 
-	cvtColor(imgOriginal, imgGray, COLOR_BGR2GRAY);
+	cvtColor(x, imgGray, COLOR_BGR2GRAY);
 	GaussianBlur(imgGray, imgBlur, Size(3, 3), 3, 0);
 	Canny(imgBlur, imgCanny, 25, 75);
 	Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
@@ -48,27 +61,43 @@ vector<Point> getContours(Mat x) {
 	vector<Point> biggest;
 	double maxArea = 0;
 
+	int maxIndex = -1;
+	
 	for (int i = 0; i < contours.size(); i++)
 	{
 		double area = contourArea(contours[i]);
-		if (area > 1000)
+		if (area > maxArea)
 		{
-			double peri = arcLength(contours[i], true);
-			approxPolyDP(contours[i], conPoly[i], 0.02 * peri, true);
-
-			if (area > maxArea && conPoly[i].size() == 4) {
-
-				//drawContours(imgOriginal, conPoly, i, Scalar(255, 0, 255), 5);
-				biggest = { conPoly[i][0],conPoly[i][1] ,conPoly[i][2] ,conPoly[i][3] };
-				maxArea = area;
-			}
-			/*drawContours(imgOriginal, conPoly, i, Scalar(255, 0, 255), 2);
-			rectangle(imgOriginal, boundRect[i].tl(), boundRect[i].br(), Scalar(0, 255, 0), 5);*/
+			maxArea = area;
+			maxIndex = i;
 		}
 	}
+
+	int i = maxIndex;
+	if (maxArea > 1000)
+	{
+		cout << maxArea << endl;
+		MaxContour = contours[i];
+		isContour = true;
+		MaxConPoly = vector<vector<Point>>(contours.size());
+		MaxBoundRect = vector<Rect>(contours.size());
+	}
+
+	if (isContour) {
+		double peri = arcLength(MaxContour, true);
+		approxPolyDP(MaxContour, MaxConPoly[i], 0.02 * peri, true);
+
+		if (MaxConPoly[i].size() == 4) {
+
+			//drawContours(imgOriginal, conPoly, i, Scalar(255, 0, 255), 5);
+			drawContours(imgOriginal, MaxConPoly, i, Scalar(255, 0, 255), 2);
+			biggest = { MaxConPoly[i][0],MaxConPoly[i][1] ,MaxConPoly[i][2] ,MaxConPoly[i][3] };
+			rectangle(imgOriginal, MaxBoundRect[i].tl(), MaxBoundRect[i].br(), Scalar(0, 255, 0), 5);
+		}
+	}
+
 	return biggest;
 }
-
 
 bool isOKcolor(Mat x) {
 
@@ -92,8 +121,6 @@ bool isOKcolor(Mat x) {
 	}
 	return false;
 }
-
-
 
 vector<Point> reorder(vector<Point> points)
 {
@@ -143,7 +170,7 @@ void HSVtrackbars() {
 }
 
 
-void checkColor(Mat img)
+Mat checkColor(Mat img)
 {
 	Mat HSV;
 	cvtColor(img, HSV, COLOR_BGR2HSV);
@@ -154,44 +181,157 @@ void checkColor(Mat img)
 	Scalar upper(smax, vmin, vmax);
 	Mat mask;
 	inRange(HSV, lower, upper, mask);
-	imshow("mask", mask);
-	vector<Point> initialPoints = getContours(mask);
-	if (isOKcolor(mask))
+	//imshow("mask", mask);
+	//vector<Point> initialPoints = getContours(mask);
+	/*if (isOKcolor(mask))
 	{
 		imshow("res", img);
-	}
+	}*/
+
+	return mask;
 }
 
 
 
+Mat getClip(int index = -1) {
+	Mat toReturn;
+
+	if (index >= 0) {
+		++clipIndex;
+		if (clipIndex > index) {
+			Result.copyTo(toReturn);
+			return toReturn;
+		}
+	}
+	cap.read(Result);
+	resize(Result, Result, Size(), 0.5, 0.5);
+	Result.copyTo(toReturn);
+	return toReturn;
+}
+
+void LoadVideo(string name) {
+	String recPath = "nagrania/";
+	cap = VideoCapture(recPath + name);
+}
 
 int main() {
 
 	vector<Point> initialPoints, docPoints;
-	String recPath = "nagrania/";
-
-	VideoCapture cap(recPath + "6.mp4");
+	
+	LoadVideo("4.mp4");
 	
 	HSVtrackbars();
-
+	int i = 0;
 	while (true) {
-		waitKey(15);
+		++i;
+		imgOriginal = getClip();
 
-		cap.read(imgOriginal);
-		resize(imgOriginal, imgOriginal, Size(), 0.5, 0.5);
+		waitKey(1);
 
 
-		/*imshow("Image", imgOriginal);
-		waitKey(250);
-		checkColor(imgOriginal);
-		continue;*/
+		/*
+			/*ret, thresh2 = cv.threshold(img, 127, 255, cv.THRESH_BINARY_INV)
+			ret, thresh3 = cv.threshold(img, 127, 255, cv.THRESH_TRUNC)
+			ret, thresh4 = cv.threshold(img, 127, 255, cv.THRESH_TOZERO)
+			ret, thresh5 = cv.threshold(img, 127, 255, cv.THRESH_TOZERO_INV)*/
 
+			
+
+		//Nie tykaæ
+		//-------------------------------------
+		//imshow("Image", imgOriginal);
+		////waitKey(10);
+		//checkColor(imgOriginal);
+		//continue;
+		//-------------------------------------
 
 		int height = imgOriginal.size[0];
 		int width = imgOriginal.size[1];
 
-		preProcessing();
-		//imshow("xd", imgErode);
+		/*Mat hsv;
+		cvtColor(imgOriginal, hsv, COLOR_BGR2HSV);
+
+		for (int j = 0; j < imgOriginal.rows; j++)
+			for (int i = 0; i < imgOriginal.cols; i++)
+				hsv.at<Vec3b>(j, i)[1] = 255;
+
+		cvtColor(hsv, imgOriginal, COLOR_HSV2BGR);*/
+
+		//dilate(imgOriginal, imgOriginal, Mat::ones(3, 3, 0)); //Mat.ones(new Size(3, 3), 0)
+
+		Mat grayC;
+		cvtColor(imgOriginal, grayC, COLOR_RGB2GRAY);
+		Mat imgToProc;
+		imgOriginal.copyTo(imgToProc);
+		//threshold(grayC, imgToProc, 180, 180, THRESH_TRUNC);
+
+
+		for (int j = 0; j < grayC.rows; j++)
+			for (int i = 0; i < grayC.cols; i++)
+			{
+				int x = grayC.at<uchar>(j, i);
+				if (x > 180) {
+					grayC.at<uchar>(j, i) = 50;
+					imgToProc.at<Vec3b>(j, i)[0] = 50;
+					imgToProc.at<Vec3b>(j, i)[1] = 50;
+					imgToProc.at<Vec3b>(j, i)[2] = 50;
+				}
+				if (x < 50) {
+					grayC.at<uchar>(j, i) = 50;
+					imgToProc.at<Vec3b>(j, i)[0] = 50;
+					imgToProc.at<Vec3b>(j, i)[1] = 50;
+					imgToProc.at<Vec3b>(j, i)[2] = 50;
+				}
+			}
+
+		//imshow("proc", imgToProc);
+		
+		preProcessing(imgOriginal);
+		imshow("Erode1", imgErode);
+		
+		
+		Mat mask = checkColor(imgOriginal);
+		Mat maskCopy;
+		mask.copyTo(maskCopy);
+
+		int sigma = 2;
+		for (int j = 0; j < mask.rows; j++)
+			for (int i = 0; i < mask.cols; i++)
+			{
+				if (mask.at<bool>(j, i) != 0)
+				{
+					for (int k = -sigma; k < sigma; ++k)
+						for (int l = -sigma; l < sigma; ++l)
+						{
+							int y = j + k;
+							int x = i + l;
+							if (x < 0 || y < 0 || x > mask.cols - 1 || y > mask.rows - 1)
+								continue;
+							maskCopy.at<uchar>(y, x) = 255;
+						}
+				}
+			}
+
+		//Mat kernel2 = getStructuringElement(MORPH_RECT, Size(8, 8));
+		//dilate(mask, mask, kernel2);
+
+
+
+
+		imshow("Mask", maskCopy);
+
+		for (int j = 0; j < grayC.rows; j++)
+			for (int i = 0; i < grayC.cols; i++)
+			{
+				if (maskCopy.at<bool>(j, i) == 0)
+					imgErode.at<bool>(j, i) = 0;
+			}
+
+		Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
+		dilate(imgErode, imgErode, kernel);
+
+		imshow("Erode2", imgErode);
+
 		initialPoints = getContours(imgErode);
 		if (initialPoints.size() < 4) {
 			imshow("Image", imgOriginal);
@@ -204,14 +344,14 @@ int main() {
 		Rect roi(cropVal, cropVal, width - (2 * cropVal), height - (2 * cropVal));
 		imgCrop = imgWarp(roi);
 
-		checkColor(imgCrop);
+		//checkColor(imgCrop);
 
 		imshow("Image", imgOriginal);
 		//imshow("Image Dilation", imgThre);
 		//imshow("Image Warp", img.Warp);
 		
 
-		//imshow("Image Crop", imgCrop);
+		imshow("Image Crop", imgCrop);
 	}
 	return 0;
 }
